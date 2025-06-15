@@ -18,7 +18,7 @@ def parse_signal(msg):
         re.search(r'STOP[\s-]?LOSS\s*[:;]?\s*([\d.]+)', msg)
     )
 
-    # ✅ Match Take Profits (TP 1, TP2, TP: ...)
+    # ✅ Match Take Profits (TP 1, TP2, TP: ... )
     tps = re.findall(r'TP\s*\d*\s*[:;]?\s*([\d.]+)', msg)
 
     # ✅ Final result
