@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+
+# Telethon session files
+*.session
+*.session-journal
+
+# VSCode and IDE stuff
+.vscode/
+.idea/
+*.swp
+
+# Environment secrets
+.env
+.env.*
+
+# Log files
+*.log
+logs/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Jupyter notebooks (if you use them)
+.ipynb_checkpoints/
+
+# MetaTrader temp (optional)
+*.ex5
+*.log
+*.mq5
+*.hcc
+*.ini
+
+# Test outputs
+tests/__pycache__/
+test_results/
