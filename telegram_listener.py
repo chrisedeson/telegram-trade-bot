@@ -11,29 +11,36 @@ load_dotenv()
 # 📲 Fetch your Telegram credentials
 api_id = int(os.getenv('TELEGRAM_API_ID'))
 api_hash = os.getenv('TELEGRAM_API_HASH')
-chat = os.getenv('TELEGRAM_CHAT')
+chat_id = int(os.getenv('TELEGRAM_CHAT'))  # Make sure this is -100... format
 
-# 🧠 Initialize Telethon client (session is saved as session_name.session)
+# 🧠 Initialize Telethon client
 client = TelegramClient('session_name', api_id, api_hash)
 
 # Initialize the logger
 logger = logging.getLogger()
+logging.basicConfig(level=logging.INFO)
 
-# ✅ Define your handler
-@client.on(events.NewMessage(chats=chat))
-async def handler(event):
-    msg = event.message.message
-    logger.info(f"📩 New message: {msg}")
+async def main():
+    # ✅ Resolve the chat ID to a proper entity
+    chat_entity = await client.get_entity(chat_id)
 
-    # Parse the trade signal
-    signal = parse_signal(msg)
-    if signal:
-        logger.info(f"✅ Parsed signal: {signal}")
-        send_to_broker(signal)
-    else:
-        logger.warning(f"❌ Invalid or unrecognized message: {msg}")
+    # ✅ Register event using resolved chat entity
+    @client.on(events.NewMessage(chats=chat_entity))
+    async def handler(event):
+        msg = event.message.message
+        logger.info(f"📩 New message: {msg}")
 
-# ▶️ Start the client
-client.start()
-logger.info("Bot started and connected to Telegram.")
-client.run_until_disconnected()
+        # Parse the trade signal
+        signal = parse_signal(msg)
+        if signal:
+            logger.info(f"✅ Parsed signal: {signal}")
+            send_to_broker(signal)
+        else:
+            logger.warning(f"❌ Invalid or unrecognized message: {msg}")
+
+    logger.info("Bot started and connected to Telegram.")
+    await client.run_until_disconnected()
+
+# ▶️ Start client and run async main
+with client:
+    client.loop.run_until_complete(main())
