@@ -2,6 +2,8 @@
 
 import MetaTrader5 as mt5
 import time
+import os
+from dotenv import load_dotenv
 
 RAW_ALIASES = {
     "XAUUSD": ["GOLD", "XAU", "XAUUSD"],
@@ -14,6 +16,12 @@ RAW_ALIASES = {
 }
 
 signal_cache = {}
+
+# Load the .env file (choose which .env manually or via command line)
+ENV_FILE = os.getenv("ENV_FILE", ".env")
+load_dotenv(dotenv_path=ENV_FILE)
+
+MT5_PATH = os.getenv("MT5_PATH")
 
 def resolve_symbol_name(name):
     name = name.upper().strip()
@@ -29,13 +37,18 @@ def get_pip_size(symbol):
         return None
     return {2: 0.01, 3: 0.001, 4: 0.0001, 5: 0.00001}.get(info.digits, None)
 
+def initialize_mt5():
+    if not mt5.initialize(path=MT5_PATH):
+        print(f"MT5 init failed: {mt5.last_error()}")
+        return False
+    return True
+
 def send_to_broker(signal, message_id=None):
     if message_id and message_id in signal_cache:
         print(f"Signal already processed for message {message_id}.")
         return
 
-    if not mt5.initialize():
-        print("MT5 init failed", mt5.last_error())
+    if not initialize_mt5():
         return
 
     symbol = resolve_symbol_name(signal["symbol"])
@@ -52,9 +65,11 @@ def send_to_broker(signal, message_id=None):
         mt5.shutdown()
         return
 
-    price = (sum(signal["entry"]) / 2 if signal["entry"]
-             else mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY
-             else mt5.symbol_info_tick(symbol).bid)
+    price = (
+        sum(signal["entry"]) / 2 if signal["entry"]
+        else mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY
+        else mt5.symbol_info_tick(symbol).bid
+    )
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -83,8 +98,7 @@ def send_to_broker(signal, message_id=None):
     mt5.shutdown()
 
 def update_trade(message_id, new_signal):
-    if not mt5.initialize():
-        print("Init failed for update")
+    if not initialize_mt5():
         return
 
     if message_id not in signal_cache:
