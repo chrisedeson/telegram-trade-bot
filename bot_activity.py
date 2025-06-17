@@ -1,3 +1,4 @@
+import os
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -6,7 +7,6 @@ log_file = 'logs/trade_bot.log'  # You can change this to any name you prefer
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
 
 # Create the log directory if it doesn't exist
-import os
 os.makedirs('logs', exist_ok=True)
 
 # Create a rotating file handler
