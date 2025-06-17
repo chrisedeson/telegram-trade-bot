@@ -1,3 +1,4 @@
+import sys
 import os
 import logging
 from dotenv import load_dotenv
@@ -6,15 +7,18 @@ from parser import parse_signal
 from trading_bot import send_to_broker, update_trade
 from collections import defaultdict
 
-load_dotenv()
+# 📦 Get env file from CLI
+env_file = sys.argv[1] if len(sys.argv) > 1 else ".env"
+os.environ["ENV_FILE"] = env_file  # used by trading_bot
+load_dotenv(dotenv_path=env_file)  # load for this script too
 
+# 🚀 Environment Variables
 api_id = int(os.getenv("TELEGRAM_API_ID"))
 api_hash = os.getenv("TELEGRAM_API_HASH")
 chat_id = int(os.getenv("TELEGRAM_CHAT"))
 session_name = os.getenv("TELEGRAM_SESSION_NAME", "session_default")
 
 client = TelegramClient(session_name, api_id, api_hash)
-
 logger = logging.getLogger()
 processed_signals = defaultdict(dict)
 
