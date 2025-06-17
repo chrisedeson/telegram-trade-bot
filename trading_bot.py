@@ -1,9 +1,17 @@
-# trading_bot.py
-
 import MetaTrader5 as mt5
-import time
 import os
 from dotenv import load_dotenv
+
+# ----------------------------------
+# Load environment config
+# ----------------------------------
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(dotenv_path=env_file)
+
+print(f"📦 [trading_bot] Loaded env file: {env_file}")
+
+MT5_PATH = os.getenv("MT5_PATH")
+signal_cache = {}
 
 RAW_ALIASES = {
     "XAUUSD": ["GOLD", "XAU", "XAUUSD"],
@@ -15,14 +23,9 @@ RAW_ALIASES = {
     "USDJPY": ["USDJPY", "JAPYEN", "USJPY"],
 }
 
-signal_cache = {}
-
-# Load the .env file (choose which .env manually or via command line)
-ENV_FILE = os.getenv("ENV_FILE", ".env")
-load_dotenv(dotenv_path=ENV_FILE)
-
-MT5_PATH = os.getenv("MT5_PATH")
-
+# ----------------------------------
+# Utility Functions
+# ----------------------------------
 def resolve_symbol_name(name):
     name = name.upper().strip()
     for actual, aliases in RAW_ALIASES.items():
@@ -33,19 +36,22 @@ def resolve_symbol_name(name):
 def get_pip_size(symbol):
     info = mt5.symbol_info(symbol)
     if info is None:
-        print(f"Symbol info not found: {symbol}")
+        print(f"❌ Symbol info not found: {symbol}")
         return None
-    return {2: 0.01, 3: 0.001, 4: 0.0001, 5: 0.00001}.get(info.digits, None)
+    return {2: 0.01, 3: 0.001, 4: 0.0001, 5: 0.00001}.get(info.digits)
 
 def initialize_mt5():
     if not mt5.initialize(path=MT5_PATH):
-        print(f"MT5 init failed: {mt5.last_error()}")
+        print(f"⚠️ MT5 init failed: {mt5.last_error()}")
         return False
     return True
 
+# ----------------------------------
+# Core Logic: Send & Update
+# ----------------------------------
 def send_to_broker(signal, message_id=None):
     if message_id and message_id in signal_cache:
-        print(f"Signal already processed for message {message_id}.")
+        print(f"⚠️ Signal already processed for message {message_id}.")
         return
 
     if not initialize_mt5():
@@ -53,22 +59,22 @@ def send_to_broker(signal, message_id=None):
 
     symbol = resolve_symbol_name(signal["symbol"])
     if not mt5.symbol_select(symbol, True):
-        print("Symbol not in Market Watch")
+        print("❌ Symbol not in Market Watch")
         mt5.shutdown()
         return
 
     volume = 0.01
     order_type = mt5.ORDER_TYPE_BUY if signal["type"] == "BUY" else mt5.ORDER_TYPE_SELL
-
     pip = get_pip_size(symbol)
     if pip is None:
         mt5.shutdown()
         return
 
+    tick = mt5.symbol_info_tick(symbol)
     price = (
         sum(signal["entry"]) / 2 if signal["entry"]
-        else mt5.symbol_info_tick(symbol).ask if order_type == mt5.ORDER_TYPE_BUY
-        else mt5.symbol_info_tick(symbol).bid
+        else tick.ask if order_type == mt5.ORDER_TYPE_BUY
+        else tick.bid
     )
 
     request = {
@@ -87,11 +93,10 @@ def send_to_broker(signal, message_id=None):
     }
 
     result = mt5.order_send(request)
-
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"Trade failed: {result.retcode}")
+        print(f"❌ Trade failed: {result.retcode}")
     else:
-        print(f"Trade placed: {result.order}")
+        print(f"✅ Trade placed: Order #{result.order}")
         if message_id:
             signal_cache[message_id] = signal
 
@@ -102,15 +107,14 @@ def update_trade(message_id, new_signal):
         return
 
     if message_id not in signal_cache:
-        print("No cached signal for message edit.")
+        print("❌ No cached signal for message edit.")
         mt5.shutdown()
         return
 
     symbol = resolve_symbol_name(new_signal["symbol"])
     orders = mt5.positions_get(symbol=symbol)
-
     if not orders:
-        print("No open position found to update.")
+        print("❌ No open position found to update.")
         mt5.shutdown()
         return
 
@@ -133,9 +137,9 @@ def update_trade(message_id, new_signal):
 
     result = mt5.order_send(modify)
     if result.retcode == mt5.TRADE_RETCODE_DONE:
-        print("Trade updated.")
+        print("✅ Trade updated.")
         signal_cache[message_id] = new_signal
     else:
-        print(f"Failed to update trade: {result.retcode}")
+        print(f"❌ Failed to update trade: {result.retcode}")
 
     mt5.shutdown()
