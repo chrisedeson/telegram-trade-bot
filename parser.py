@@ -9,8 +9,13 @@ def parse_signal(msg):
     # ✅ Match BUY/SELL
     side = re.search(r'\b(BUY|SELL)\b', msg)
 
-    # ✅ Match Entry Zone (handle typos like "ZONEL")
-    entry = re.search(r'ENTRY\s*ZONE[L]?\s*[:;]?\s*([\d.]+)\s*[-–—]\s*([\d.]+)', msg)
+    # ✅ Match flexible Entry Zone (handles "@", "between", etc.)
+    # Looks for something like: "BUY @3439.5 - 3436.5" or "SELL 3439.5–3436.5"
+    entry_match = re.search(r'(BUY|SELL)[^0-9]{0,10}[@:]?\s*([\d.]+)\s*[-–—]\s*([\d.]+)', msg)
+
+    entry = None
+    if entry_match:
+        entry = [float(entry_match.group(2)), float(entry_match.group(3))]
 
     # ✅ Match Stop Loss (SL, Stoploss, Stop Loss)
     sl = (
@@ -18,7 +23,7 @@ def parse_signal(msg):
         re.search(r'STOP[\s-]?LOSS\s*[:;]?\s*([\d.]+)', msg)
     )
 
-    # ✅ Match Take Profits (TP 1, TP2, TP: ... )
+    # ✅ Match Take Profits (TP1, TP2, TP: ...)
     tps = re.findall(r'TP\s*\d*\s*[:;]?\s*([\d.]+)', msg)
 
     # ✅ Final result
@@ -26,7 +31,7 @@ def parse_signal(msg):
         return {
             "symbol": pair.group(1),
             "type": side.group(1),
-            "entry": [float(entry.group(1)), float(entry.group(2))] if entry else None,
+            "entry": entry,
             "sl": float(sl.group(1)) if sl else None,
             "tp": [float(tp) for tp in tps] if tps else []
         }
