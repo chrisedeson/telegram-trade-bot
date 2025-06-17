@@ -1,46 +1,60 @@
-from dotenv import load_dotenv
 import os
+import logging
+from dotenv import load_dotenv
 from telethon import TelegramClient, events
 from parser import parse_signal
-import logging
-from trading_bot import send_to_broker
+from trading_bot import send_to_broker, update_trade
+from collections import defaultdict
 
-# 🔒 Load environment variables from .env
 load_dotenv()
 
-# 📲 Fetch your Telegram credentials
-api_id = int(os.getenv('TELEGRAM_API_ID'))
-api_hash = os.getenv('TELEGRAM_API_HASH')
-chat_id = int(os.getenv('TELEGRAM_CHAT'))  # Make sure this is -100... format
+api_id = int(os.getenv("TELEGRAM_API_ID"))
+api_hash = os.getenv("TELEGRAM_API_HASH")
+chat_id = int(os.getenv("TELEGRAM_CHAT"))
+session_name = os.getenv("TELEGRAM_SESSION_NAME", "session_default")
 
-# 🧠 Initialize Telethon client
-client = TelegramClient('session_name', api_id, api_hash)
+client = TelegramClient(session_name, api_id, api_hash)
 
-# Initialize the logger
 logger = logging.getLogger()
-logging.basicConfig(level=logging.INFO)
+processed_signals = defaultdict(dict)
 
-async def main():
-    # ✅ Resolve the chat ID to a proper entity
-    chat_entity = await client.get_entity(chat_id)
 
-    # ✅ Register event using resolved chat entity
-    @client.on(events.NewMessage(chats=chat_entity))
-    async def handler(event):
-        msg = event.message.message
-        logger.info(f"📩 New message: {msg}")
+async def handle_signal(event, is_edit=False):
+    msg = event.message.message
+    msg_id = event.message.id
+    logger.info(f"{'✏️ Edited' if is_edit else '📩 New'} message: {msg}")
 
-        # Parse the trade signal
-        signal = parse_signal(msg)
-        if signal:
-            logger.info(f"✅ Parsed signal: {signal}")
-            send_to_broker(signal)
-        else:
-            logger.warning(f"❌ Invalid or unrecognized message: {msg}")
+    signal = parse_signal(msg)
+    if not signal:
+        logger.warning("❌ Could not parse signal.")
+        return
 
-    logger.info("Bot started and connected to Telegram.")
-    await client.run_until_disconnected()
+    logger.info(f"✅ Parsed: {signal}")
+    previous = processed_signals.get(msg_id)
 
-# ▶️ Start client and run async main
+    if not previous:
+        logger.info("🟢 New trade signal.")
+        send_to_broker(signal, message_id=msg_id)
+        processed_signals[msg_id] = signal
+    elif signal != previous:
+        logger.info("🔁 Updating modified trade.")
+        update_trade(msg_id, signal)
+        processed_signals[msg_id] = signal
+    else:
+        logger.info("⏸️ No changes to signal.")
+
+
+@client.on(events.NewMessage(chats=chat_id))
+async def new_handler(event):
+    await handle_signal(event, is_edit=False)
+
+
+@client.on(events.MessageEdited(chats=chat_id))
+async def edit_handler(event):
+    await handle_signal(event, is_edit=True)
+
+
 with client:
-    client.loop.run_until_complete(main())
+    client.loop.run_until_complete(client.get_entity(chat_id))
+    logger.info("🚀 Bot running...")
+    client.run_until_disconnected()
