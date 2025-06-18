@@ -13,6 +13,9 @@ print(f"📦 [trading_bot] Loaded env file: {env_file}")
 MT5_PATH = os.getenv("MT5_PATH")
 signal_cache = {}
 
+# ----------------------------------
+# Symbol Aliases (Add more as needed)
+# ----------------------------------
 RAW_ALIASES = {
     "XAUUSD": ["GOLD", "XAU", "XAUUSD"],
     "BTCUSD": ["BTC", "BTCUSD", "BITCOIN"],
@@ -21,9 +24,9 @@ RAW_ALIASES = {
     "EURUSD": ["EURUSD", "EUROUSD"],
     "GBPUSD": ["GBPUSD", "POUNDUSD"],
     "USDJPY": ["USDJPY", "JAPYEN", "USJPY"],
-    "USDCHF": ["USDCHF", "SWISS"],
     "AUDUSD": ["AUDUSD", "AUSSIE"],
-    "NZDUSD": ["NZDUSD", "KIWI"],
+    "USDCHF": ["USDCHF", "SWISSY"],
+    "NZDUSD": ["NZDUSD", "KIWI"]
 }
 
 # ----------------------------------
@@ -74,20 +77,11 @@ def send_to_broker(signal, message_id=None):
         return
 
     tick = mt5.symbol_info_tick(symbol)
-    if not tick:
-        print("❌ Could not fetch tick data.")
-        mt5.shutdown()
-        return
-
-    if signal["entry"]:
-        price = sum(signal["entry"]) / 2
-    else:
-        price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
-
-    market_price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
-    if abs(price - market_price) > 0.0002:  # Allowable slippage buffer
-        print(f"⚠️ Adjusting price from {price} to market price {market_price}")
-        price = market_price
+    price = (
+        sum(signal["entry"]) / 2 if signal["entry"]
+        else tick.ask if order_type == mt5.ORDER_TYPE_BUY
+        else tick.bid
+    )
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -101,12 +95,13 @@ def send_to_broker(signal, message_id=None):
         "magic": 123456,
         "comment": "Telegram Signal",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        # FIXED: FOK filling mode for OctaFX compatibility
+        "type_filling": mt5.ORDER_FILLING_FOK
     }
 
     result = mt5.order_send(request)
     if result.retcode != mt5.TRADE_RETCODE_DONE:
-        print(f"❌ Trade failed: {result.retcode}")
+        print(f"❌ Trade failed: {result.retcode} - {result.comment}")
     else:
         print(f"✅ Trade placed: Order #{result.order}")
         if message_id:
@@ -144,7 +139,7 @@ def update_trade(message_id, new_signal):
         "magic": 123456,
         "comment": "Signal Edited",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        "type_filling": mt5.ORDER_FILLING_FOK
     }
 
     result = mt5.order_send(modify)
