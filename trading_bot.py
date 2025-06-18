@@ -21,6 +21,9 @@ RAW_ALIASES = {
     "EURUSD": ["EURUSD", "EUROUSD"],
     "GBPUSD": ["GBPUSD", "POUNDUSD"],
     "USDJPY": ["USDJPY", "JAPYEN", "USJPY"],
+    "USDCHF": ["USDCHF", "SWISS"],
+    "AUDUSD": ["AUDUSD", "AUSSIE"],
+    "NZDUSD": ["NZDUSD", "KIWI"],
 }
 
 # ----------------------------------
@@ -71,11 +74,20 @@ def send_to_broker(signal, message_id=None):
         return
 
     tick = mt5.symbol_info_tick(symbol)
-    price = (
-        sum(signal["entry"]) / 2 if signal["entry"]
-        else tick.ask if order_type == mt5.ORDER_TYPE_BUY
-        else tick.bid
-    )
+    if not tick:
+        print("❌ Could not fetch tick data.")
+        mt5.shutdown()
+        return
+
+    if signal["entry"]:
+        price = sum(signal["entry"]) / 2
+    else:
+        price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
+
+    market_price = tick.ask if order_type == mt5.ORDER_TYPE_BUY else tick.bid
+    if abs(price - market_price) > 0.0002:  # Allowable slippage buffer
+        print(f"⚠️ Adjusting price from {price} to market price {market_price}")
+        price = market_price
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
